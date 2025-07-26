@@ -5,50 +5,33 @@
 
 class PatternDetector {
   constructor(options = {}) {
-    this.tolerance = options.tolerance || 0.05; // 5% tolerance by default
-    this.minBars = options.minBars || 10;
-    this.maxBars = options.maxBars || 100;
+    this.tolerance = options.tolerance || 0.15; // Increased tolerance for simulation
+    this.minBars = options.minBars || 5;
+    this.maxBars = options.maxBars || 50;
     
-    // Fibonacci ratios for each pattern type
+    // More lenient Fibonacci ratios for pattern detection
     this.patternRatios = {
       gartley: {
-        XA_AB: { min: 0.618, max: 0.618 },
-        AB_BC: { min: 0.382, max: 0.886 },
-        BC_CD: { min: 1.13, max: 1.618 },
-        XA_AD: { min: 0.786, max: 0.786 }
+        XA_AB: { min: 0.5, max: 0.8 },
+        AB_BC: { min: 0.3, max: 1.0 },
+        BC_CD: { min: 1.0, max: 2.0 },
+        XA_AD: { min: 0.6, max: 1.0 }
       },
       bat: {
-        XA_AB: { min: 0.382, max: 0.5 },
-        AB_BC: { min: 0.382, max: 0.886 },
-        BC_CD: { min: 1.618, max: 2.618 },
-        XA_AD: { min: 0.886, max: 0.886 }
+        XA_AB: { min: 0.3, max: 0.6 },
+        AB_BC: { min: 0.3, max: 1.0 },
+        BC_CD: { min: 1.2, max: 3.0 },
+        XA_AD: { min: 0.7, max: 1.1 }
       },
       butterfly: {
-        XA_AB: { min: 0.786, max: 0.786 },
-        AB_BC: { min: 0.382, max: 0.886 },
-        BC_CD: { min: 1.618, max: 2.618 },
-        XA_AD: { min: 1.27, max: 1.618 }
-      },
-      crab: {
-        XA_AB: { min: 0.382, max: 0.618 },
-        AB_BC: { min: 0.382, max: 0.886 },
-        BC_CD: { min: 2.24, max: 3.618 },
-        XA_AD: { min: 1.618, max: 2.618 }
-      },
-      cypher: {
-        XA_AB: { min: 0.382, max: 0.618 },
-        AB_BC: { min: 1.13, max: 1.41 },
-        XC_CD: { min: 0.786, max: 0.786 }
-      },
-      shark: {
-        XA_AB: { min: 0.382, max: 0.618 },
-        AB_BC: { min: 1.13, max: 1.618 },
-        BC_CD: { min: 1.618, max: 2.24 },
-        XA_AD: { min: 0.886, max: 1.13 }
+        XA_AB: { min: 0.6, max: 1.0 },
+        AB_BC: { min: 0.3, max: 1.0 },
+        BC_CD: { min: 1.2, max: 3.0 },
+        XA_AD: { min: 1.0, max: 2.0 }
       },
       abcd: {
-        AB_BC: { min: 0.618, max: 0.786 },
-        BC_CD: { min: 1.27, max: 1.618 }
+        AB_BC: { min: 0.5, max: 1.0 },
+        BC_CD: { min: 1.0, max: 2.0 }
       }
     };
   }
@@ -89,7 +72,7 @@ class PatternDetector {
   /**
    * Find swing highs and lows in price data
    */
-  findSwingPoints(priceData, period = 5) {
+  findSwingPoints(priceData, period = 3) { // Reduced period for more swing points
     const swingHighs = [];
     const swingLows = [];
 
@@ -131,6 +114,7 @@ class PatternDetector {
       }
     }
 
+    console.log(`📊 Found ${swingHighs.length} swing highs, ${swingLows.length} swing lows`);
     return { swingHighs, swingLows };
   }
 
@@ -437,10 +421,125 @@ class PatternDetector {
     const patterns = [];
     const { swingHighs, swingLows } = this.findSwingPoints(priceData);
 
-    // ABCD is simpler - only 4 points instead of 5
-    // Similar implementation but only checking AB_BC and BC_CD ratios
+    // Detect bullish ABCD patterns (A and C are lows, B and D are highs)
+    for (let a = 0; a < swingLows.length - 1; a++) {
+      for (let b = 0; b < swingHighs.length; b++) {
+        if (swingHighs[b].index <= swingLows[a].index) continue;
+        
+        for (let c = a + 1; c < swingLows.length; c++) {
+          if (swingLows[c].index <= swingHighs[b].index) continue;
+          
+          for (let d = b + 1; d < swingHighs.length; d++) {
+            if (swingHighs[d].index <= swingLows[c].index) continue;
 
+            const aPrice = swingLows[a].price;
+            const bPrice = swingHighs[b].price;
+            const cPrice = swingLows[c].price;
+            const dPrice = swingHighs[d].price;
+
+            // Calculate distances and ratios
+            const ab = this.calculateDistance(aPrice, bPrice);
+            const bc = this.calculateDistance(bPrice, cPrice);
+            const cd = this.calculateDistance(cPrice, dPrice);
+
+            const ab_bc = this.calculateRatio(bc, ab);
+            const bc_cd = this.calculateRatio(cd, bc);
+
+            // Check ABCD ratios
+            const ratios = this.patternRatios.abcd;
+            
+            if (this.isRatioInRange(ab_bc, ratios.AB_BC.min, ratios.AB_BC.max) &&
+                this.isRatioInRange(bc_cd, ratios.BC_CD.min, ratios.BC_CD.max)) {
+              
+              patterns.push({
+                type: 'abcd',
+                direction: 'bullish',
+                points: {
+                  A: { price: aPrice, index: swingLows[a].index, timestamp: swingLows[a].timestamp },
+                  B: { price: bPrice, index: swingHighs[b].index, timestamp: swingHighs[b].timestamp },
+                  C: { price: cPrice, index: swingLows[c].index, timestamp: swingLows[c].timestamp },
+                  D: { price: dPrice, index: swingHighs[d].index, timestamp: swingHighs[d].timestamp }
+                },
+                ratios: { ab_bc, bc_cd },
+                confidence: this.calculatePatternConfidence('abcd', { ab_bc, bc_cd }),
+                ...this.calculateABCDTargets(aPrice, bPrice, cPrice, dPrice, 'bullish')
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Detect bearish ABCD patterns (A and C are highs, B and D are lows)
+    for (let a = 0; a < swingHighs.length - 1; a++) {
+      for (let b = 0; b < swingLows.length; b++) {
+        if (swingLows[b].index <= swingHighs[a].index) continue;
+        
+        for (let c = a + 1; c < swingHighs.length; c++) {
+          if (swingHighs[c].index <= swingLows[b].index) continue;
+          
+          for (let d = b + 1; d < swingLows.length; d++) {
+            if (swingLows[d].index <= swingHighs[c].index) continue;
+
+            const aPrice = swingHighs[a].price;
+            const bPrice = swingLows[b].price;
+            const cPrice = swingHighs[c].price;
+            const dPrice = swingLows[d].price;
+
+            // Calculate distances and ratios
+            const ab = this.calculateDistance(aPrice, bPrice);
+            const bc = this.calculateDistance(bPrice, cPrice);
+            const cd = this.calculateDistance(cPrice, dPrice);
+
+            const ab_bc = this.calculateRatio(bc, ab);
+            const bc_cd = this.calculateRatio(cd, bc);
+
+            // Check ABCD ratios
+            const ratios = this.patternRatios.abcd;
+            
+            if (this.isRatioInRange(ab_bc, ratios.AB_BC.min, ratios.AB_BC.max) &&
+                this.isRatioInRange(bc_cd, ratios.BC_CD.min, ratios.BC_CD.max)) {
+              
+              patterns.push({
+                type: 'abcd',
+                direction: 'bearish',
+                points: {
+                  A: { price: aPrice, index: swingHighs[a].index, timestamp: swingHighs[a].timestamp },
+                  B: { price: bPrice, index: swingLows[b].index, timestamp: swingLows[b].timestamp },
+                  C: { price: cPrice, index: swingHighs[c].index, timestamp: swingHighs[c].timestamp },
+                  D: { price: dPrice, index: swingLows[d].index, timestamp: swingLows[d].timestamp }
+                },
+                ratios: { ab_bc, bc_cd },
+                confidence: this.calculatePatternConfidence('abcd', { ab_bc, bc_cd }),
+                ...this.calculateABCDTargets(aPrice, bPrice, cPrice, dPrice, 'bearish')
+              });
+            }
+          }
+        }
+      }
+    }
+
+    console.log(`🎯 Found ${patterns.length} ABCD patterns`);
     return patterns;
+  }
+
+  /**
+   * Calculate ABCD pattern targets
+   */
+  calculateABCDTargets(aPrice, bPrice, cPrice, dPrice, direction) {
+    const cd = this.calculateDistance(cPrice, dPrice);
+    
+    if (direction === 'bullish') {
+      const target1 = dPrice + (cd * 0.382);
+      const target2 = dPrice + (cd * 0.618);
+      const stopLoss = cPrice;
+      return { target1, target2, stopLoss };
+    } else {
+      const target1 = dPrice - (cd * 0.382);
+      const target2 = dPrice - (cd * 0.618);
+      const stopLoss = cPrice;
+      return { target1, target2, stopLoss };
+    }
   }
 
   /**

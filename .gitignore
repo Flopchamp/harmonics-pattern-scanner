@@ -1,0 +1,197 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+
+# Production builds
+/client/build/
+/server/dist/
+/server/build/
+build/
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.example
+
+# API Keys and secrets
+*.key
+*.pem
+config/secrets.json
+secrets/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Market data cache
+/server/data/cache/
+/server/data/historical/
+market-data-cache/
+
+# Trading data
+trades.json
+positions.json
+portfolio.json
+
+# Backup files
+*.backup
+*.bak
+backup/
+*-backup.js
+server-backup.js
+server_clean.js
+
+# TradingView related - Keep main library but ignore bundles
+/client/public/charting_library/bundles/
+charting_library/bundles/
+charting_library/static/
+
+# Pattern detection cache
+pattern-cache/
+*.pattern
+
+# Documentation builds
+docs/_build/
+
+# Python (if any Python scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Jest
+/coverage
+
+# React specific
+.eslintcache
+
+# Misc
+.sass-cache/
+connect.lock
+typings/
+
+# PM2
+.pm2
+
+# Local development
+local/
+development/
+
+# Windows batch files (keep the main ones but ignore temp)
+*.bat.bak
+temp-*.bat
+
+# PineScript compiled files
+scripts/*.compiled
+
+# Test files
+*.test.js
+*.spec.js
+test-*.js
+
+# Large PDF documentation (optional - remove if you want to track it)
+# *.pdf
+
+# TradingView external library (if it's a copy that can be re-downloaded)
+# charting_library-master/
+
+# Server variations (keep main server.js but ignore variations)
+server-clean.js
+server_clean.js
+
+# IDE and editor specific
+.vscode/settings.json
+.vscode/launch.json
+.idea/workspace.xml
+.idea/tasks.xml
+
+# Locale files that are auto-generated
+/client/public/charting_library/bundles/*.js
+/client/public/charting_library/bundles/*.css

@@ -8,9 +8,17 @@ class MarketDataService {
     this.symbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'NZDUSD'];
     this.timeframes = ['5M', '15M', '1H', '4H', '1D'];
     this.historicalData = new Map();
-    this.isSimulation = false; // Set to false for real data
-    this.apiKey = process.env.MARKET_DATA_API_KEY; // Add your API key to .env
-    this.dataProvider = process.env.DATA_PROVIDER || 'alpha_vantage'; // or 'fxapi', 'tradingview'
+    
+    // Check if simulation mode is enabled
+    this.isSimulation = process.env.USE_SIMULATION_DATA === 'true' || 
+                       process.env.DATA_PROVIDER === 'simulation' ||
+                       !process.env.MARKET_DATA_API_KEY ||
+                       process.env.MARKET_DATA_API_KEY === 'your_api_key_here';
+    
+    this.apiKey = process.env.MARKET_DATA_API_KEY;
+    this.dataProvider = process.env.DATA_PROVIDER || 'simulation';
+    
+    console.log(`📊 Market Data Service - Mode: ${this.isSimulation ? 'Simulation' : 'Real'}`);
   }
 
   /**
@@ -133,14 +141,21 @@ class MarketDataService {
     
     try {
       // Attempt to fetch real market data
-      const realData = await this.fetchRealMarketData(symbol, timeframe, limit);
-      if (realData && realData.length > 0) {
-        this.historicalData.set(key, realData);
-        return realData;
+      if (!this.isSimulation) {
+        console.log(`📡 Attempting to fetch real data for ${symbol} (${timeframe})`);
+        const realData = await this.fetchRealMarketData(symbol, timeframe, limit);
+        if (realData && realData.length > 0) {
+          console.log(`✅ Real data fetched for ${symbol}: ${realData.length} candles`);
+          this.historicalData.set(key, realData);
+          return realData;
+        }
+      } else {
+        console.log(`📊 Using simulation mode for ${symbol} (${timeframe})`);
       }
     } catch (error) {
-      console.warn(`Failed to fetch real data for ${symbol}: ${error.message}`);
-      console.log('Falling back to simulated data...');
+      if (!this.isSimulation) {
+        console.log(`❌ Failed to fetch real data for ${symbol}: ${error.message}. Falling back to simulation.`);
+      }
     }
     
     // Fallback to simulated data
@@ -156,8 +171,8 @@ class MarketDataService {
    * Fetch real market data from external API
    */
   async fetchRealMarketData(symbol, timeframe, limit = 500) {
-    if (!this.apiKey) {
-      throw new Error('API key not configured');
+    if (!this.apiKey || this.apiKey === 'your_api_key_here') {
+      throw new Error('Valid API key not configured');
     }
 
     switch (this.dataProvider) {

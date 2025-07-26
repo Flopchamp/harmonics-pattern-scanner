@@ -3,17 +3,9 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { Sequelize } = require('sequelize');
 
 // Load environment variables
 dotenv.config();
-
-// Import routes
-const patternsRoutes = require('./src/routes/patterns');
-const usersRoutes = require('./src/routes/users');
-
-// Import models
-const { sequelize } = require('./src/models');
 
 // Import services
 const PatternDetector = require('./src/services/patternDetector');
@@ -23,7 +15,7 @@ const TelegramBot = require('./src/utils/telegramBot');
 // Initialize services
 const marketDataService = new MarketDataService();
 const patternDetector = new PatternDetector();
-const telegramBot = new TelegramBot();
+let telegramBot;
 
 // Initialize Express app
 const app = express();
@@ -64,10 +56,6 @@ app.get('/health', (req, res) => {
     version: '1.0.0'
   });
 });
-
-// API Routes
-app.use('/api/patterns', patternsRoutes);
-app.use('/api/users', usersRoutes);
 
 // Market data API endpoints
 app.get('/api/market-data/:symbol/:timeframe', async (req, res) => {
@@ -136,218 +124,88 @@ app.get('/api/symbols', (req, res) => {
 const connectedClients = new Map();
 
 io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+  console.log(`📡 Client connected: ${socket.id}`);
   
-  // Store user information
-  socket.on('user_connect', (userData) => {
-    connectedClients.set(socket.id, {
-      userId: userData.userId,
-      username: userData.username,
-      connectedAt: new Date()
-    });
-    
-    console.log(`User ${userData.username} connected with socket ${socket.id}`);
-    
-    // Send welcome message
-    socket.emit('connected', {
-      message: 'Connected to Harmonic Pattern Scanner',
-      timestamp: new Date().toISOString()
-    });
-  });
-  
-  // Handle pattern subscription
-  socket.on('subscribe_patterns', (data) => {
-    const { symbols, patterns } = data;
-    
-    // Join rooms for specific symbols and patterns
-    if (symbols && Array.isArray(symbols)) {
-      symbols.forEach(symbol => {
-        socket.join(`patterns_${symbol}`);
-      });
-    }
-    
-    if (patterns && Array.isArray(patterns)) {
-      patterns.forEach(pattern => {
-        socket.join(`pattern_type_${pattern}`);
-      });
-    }
-    
-    console.log(`Socket ${socket.id} subscribed to patterns:`, { symbols, patterns });
-    
-    socket.emit('subscription_confirmed', {
-      symbols,
-      patterns,
-      timestamp: new Date().toISOString()
-    });
-  });
-  
-  // Handle unsubscription
-  socket.on('unsubscribe_patterns', (data) => {
-    const { symbols, patterns } = data;
-    
-    if (symbols && Array.isArray(symbols)) {
-      symbols.forEach(symbol => {
-        socket.leave(`patterns_${symbol}`);
-      });
-    }
-    
-    if (patterns && Array.isArray(patterns)) {
-      patterns.forEach(pattern => {
-        socket.leave(`pattern_type_${pattern}`);
-      });
-    }
-    
-    console.log(`Socket ${socket.id} unsubscribed from patterns:`, { symbols, patterns });
-  });
-  
-  // Handle real-time pattern detection request
-  socket.on('detect_patterns_realtime', async (data) => {
+  // Handle pattern detection requests
+  socket.on('getPatterns', async (data, callback) => {
     try {
-      const { symbol, timeframe } = data;
-      console.log(`🔍 Real-time pattern detection requested for ${symbol} (${timeframe})`);
+      const { symbol, timeframe, limit } = data;
+      console.log(`🔍 Pattern request: ${symbol} ${timeframe}`);
       
-      if (!symbol) {
-        socket.emit('error', {
-          message: 'Symbol is required for pattern detection'
+      // Get market data and detect patterns
+      const marketData = await marketDataService.getHistoricalData(
+        symbol, 
+        timeframe || '1H', 
+        limit || 200
+      );
+      
+      if (marketData && marketData.length >= 50) {
+        const patterns = await patternDetector.detectAllPatterns(marketData, { 
+          symbol, 
+          timeframe: timeframe || '1H' 
         });
-        return;
+        
+        if (callback) {
+          callback({
+            success: true,
+            patterns: patterns,
+            count: patterns.length,
+            dataSource: marketDataService.isSimulation ? 'simulated' : 'real'
+          });
+        }
+        
+        console.log(`✅ Found ${patterns.length} patterns for ${symbol}`);
+      } else {
+        if (callback) {
+          callback({
+            success: false,
+            error: 'Insufficient market data',
+            patterns: []
+          });
+        }
       }
-      
-      // Join the symbol-specific room for updates
-      socket.join(`patterns_${symbol}`);
-      
-      // Get real market data
-      const marketData = await marketDataService.getHistoricalData(symbol, timeframe || '1H', 200);
-      
-      if (!marketData || marketData.length < 50) {
-        socket.emit('error', {
-          message: 'Insufficient market data for pattern detection',
-          symbol,
-          timeframe
-        });
-        return;
-      }
-      
-      // Detect patterns using real data
-      const detectedPatterns = await patternDetector.detectAllPatterns(marketData, {
-        symbol,
-        timeframe: timeframe || '1H'
-      });
-      
-      // Send patterns back to client
-      socket.emit('patterns_detected', {
-        symbol,
-        timeframe,
-        patterns: detectedPatterns,
-        dataSource: marketDataService.isSimulation ? 'simulated' : 'real',
-        timestamp: new Date().toISOString()
-      });
-      
-      console.log(`✅ Detected ${detectedPatterns.length} patterns for ${symbol} (${timeframe})`);
-      
     } catch (error) {
-      console.error('❌ Error in pattern detection:', error);
-      socket.emit('error', {
-        message: 'Failed to detect patterns',
-        error: error.message,
-        symbol: data.symbol,
-        timeframe: data.timeframe
-      });
+      console.error('❌ Error getting patterns:', error);
+      if (callback) {
+        callback({
+          success: false,
+          error: error.message,
+          patterns: []
+        });
+      }
     }
   });
-      
-      // Initialize pattern detector
-      const detector = new PatternDetector();
-      
-      // Detect patterns
-      const detectedPatterns = await detector.detectAllPatterns(priceData, {
-        symbol,
-        timeframe: timeframe || '1H'
-      });
-      
-      // Emit detected patterns to the requesting client
-      socket.emit('patterns_detected', {
-        symbol,
-        timeframe,
-        patterns: detectedPatterns,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Broadcast to other subscribers of this symbol
-      socket.to(`patterns_${symbol}`).emit('pattern_update', {
-        symbol,
-        patterns: detectedPatterns,
-        timestamp: new Date().toISOString()
-      });
-      
-      console.log(`Real-time pattern detection completed for ${symbol}: ${detectedPatterns.length} patterns found`);
-      
-    } catch (error) {
-      console.error('Error in real-time pattern detection:', error);
-      socket.emit('error', {
-        message: 'Failed to detect patterns',
-        error: error.message
-      });
-    }
+
+  // Handle symbol subscription
+  socket.on('joinSymbol', (data) => {
+    const { symbol, timeframe } = data;
+    const roomName = `${symbol}_${timeframe}`;
+    socket.join(roomName);
+    console.log(`📊 Client ${socket.id} joined ${roomName}`);
   });
-  
+
+  // Handle settings updates
+  socket.on('updateSettings', (settings) => {
+    console.log(`⚙️ Settings updated for ${socket.id}:`, settings);
+  });
+
   // Handle client disconnect
   socket.on('disconnect', (reason) => {
-    const clientInfo = connectedClients.get(socket.id);
-    if (clientInfo) {
-      console.log(`User ${clientInfo.username} disconnected: ${reason}`);
-      connectedClients.delete(socket.id);
-    } else {
-      console.log(`Client ${socket.id} disconnected: ${reason}`);
-    }
-  });
-  
-  // Handle errors
-  socket.on('error', (error) => {
-    console.error(`Socket error for ${socket.id}:`, error);
+    console.log(`📡 Client ${socket.id} disconnected: ${reason}`);
+    connectedClients.delete(socket.id);
   });
 });
 
-// Broadcast functions for pattern notifications
-const broadcastPatternDetected = (pattern) => {
-  io.to(`patterns_${pattern.symbol}`).emit('pattern_detected', {
-    pattern,
-    timestamp: new Date().toISOString()
-  });
-  
-  io.to(`pattern_type_${pattern.type}`).emit('pattern_detected', {
-    pattern,
-    timestamp: new Date().toISOString()
-  });
-  
-  console.log(`Broadcasted pattern detection: ${pattern.type} on ${pattern.symbol}`);
-};
-
-const broadcastPatternUpdated = (pattern) => {
-  io.to(`patterns_${pattern.symbol}`).emit('pattern_updated', {
-    pattern,
-    timestamp: new Date().toISOString()
-  });
-  
-  console.log(`Broadcasted pattern update: ${pattern.id} status changed to ${pattern.status}`);
-};
-
-// Make broadcast functions available globally
-global.io = io;
-global.broadcastPatternDetected = broadcastPatternDetected;
-global.broadcastPatternUpdated = broadcastPatternUpdated;
-
+// Initialize services
 const initializeServices = async () => {
   try {
     // Initialize market data service
     await marketDataService.initialize();
     console.log('✅ Market data service initialized');
     
-    // Initialize pattern detector
-    console.log('✅ Pattern detector initialized');
-    
     // Initialize Telegram bot if token is provided
     if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN !== 'your_telegram_bot_token_from_botfather') {
+      telegramBot = new TelegramBot();
       console.log('✅ Telegram bot initialized');
     } else {
       console.log('⚠️  Telegram bot disabled (no valid token configured)');
@@ -390,7 +248,7 @@ const startRealTimePatternDetection = () => {
                 patterns.forEach(pattern => {
                   // Only broadcast if pattern is newly completed
                   if (pattern.status === 'completed' && pattern.confidence > 0.7) {
-                    io.to(`patterns_${symbol}`).emit('newPattern', {
+                    io.to(`${symbol}_${timeframe}`).emit('newPattern', {
                       ...pattern,
                       timestamp: new Date().toISOString()
                     });
@@ -419,17 +277,6 @@ const startRealTimePatternDetection = () => {
 // Database initialization and server startup
 const startServer = async () => {
   try {
-    // Test database connection
-    await sequelize.authenticate();
-    console.log('Database connection established successfully');
-    
-    // Sync database models
-    await sequelize.sync({ 
-      alter: process.env.NODE_ENV === 'development',
-      force: false // Set to true only for development if you want to recreate tables
-    });
-    console.log('Database models synchronized');
-    
     // Initialize services
     await initializeServices();
     
@@ -437,64 +284,34 @@ const startServer = async () => {
     server.listen(PORT, () => {
       console.log(`\n🚀 Harmonic Pattern Scanner Server`);
       console.log(`📡 Server running on port ${PORT}`);
-      console.log(`🔗 WebSocket endpoint: ws://localhost:${PORT}`);
-      console.log(`🌐 API endpoint: http://localhost:${PORT}/api`);
-      console.log(`💾 Database: ${process.env.DB_NAME} on ${process.env.DB_HOST}`);
-      console.log(`📊 Connected clients: ${connectedClients.size}`);
-      console.log(`🕐 Started at: ${new Date().toISOString()}\n`);
+      console.log(`🔗 API Health Check: http://localhost:${PORT}/health`);
+      console.log(`📊 Market Data API: http://localhost:${PORT}/api/symbols`);
+      console.log(`💡 WebSocket ready for real-time pattern updates`);
+      console.log(`📈 Data Source: ${marketDataService.isSimulation ? 'Simulated' : 'Real Market Data'}\n`);
     });
     
   } catch (error) {
-    console.error('Unable to start server:', error);
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 };
 
-// Graceful shutdown handling
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  
-  // Close WebSocket connections
-  io.close();
-  
-  // Close database connection
-  await sequelize.close();
-  
-  // Close HTTP server
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  
-  // Close WebSocket connections
-  io.close();
-  
-  // Close database connection
-  await sequelize.close();
-  
-  // Close HTTP server
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
-});
-
 // Start the server
-startServer();
+startServer().catch(console.error);
 
-module.exports = app;
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n🛑 Shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
