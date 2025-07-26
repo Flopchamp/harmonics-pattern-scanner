@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TradingView Chart Test</title>
+    <script src="/charting_library/charting_library.js"></script>
+    <script src="/datafeed.js"></script>
+</head>
+<body>
+    <div id="tradingview_chart" style="width: 100%; height: 600px;"></div>
+    
+    <script>
+        window.onload = function() {
+            const widget = new TradingView.widget({
+                symbol: 'EURUSD',
+                interval: '1H',
+                container: 'tradingview_chart',
+                datafeed: new Datafeed(),
+                library_path: '/charting_library/',
+                locale: 'en',
+                disabled_features: ['use_localstorage_for_settings'],
+                enabled_features: ['study_templates'],
+                client_id: 'harmonic-scanner-test',
+                user_id: 'public_user',
+                fullscreen: false,
+                autosize: true,
+                theme: 'dark'
+            });
+            
+            widget.onChartReady(function() {
+                console.log('Chart is ready');
+                alert('TradingView chart loaded successfully!');
+            });
+        };
+    </script>
+</body>
+</html>

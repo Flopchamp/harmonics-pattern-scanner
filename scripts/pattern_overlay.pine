@@ -1,0 +1,259 @@
+//@version=5
+indicator("Harmonic Pattern Overlay", shorttitle="HPO", overlay=true, max_labels_count=100, max_lines_count=200)
+
+// Input parameters for pattern display
+show_completed_patterns = input.bool(true, title="Show Completed Patterns")
+show_potential_patterns = input.bool(true, title="Show Potential Patterns")
+pattern_line_width = input.int(2, title="Pattern Line Width", minval=1, maxval=5)
+label_size = input.string("small", title="Label Size", options=["tiny", "small", "normal", "large"])
+
+// Pattern colors
+bullish_color = input.color(color.new(color.green, 30), title="Bullish Pattern Color")
+bearish_color = input.color(color.new(color.red, 30), title="Bearish Pattern Color")
+potential_color = input.color(color.new(color.yellow, 50), title="Potential Pattern Color")
+
+// Projection settings
+show_projections = input.bool(true, title="Show Price Projections")
+projection_style = input.string("dashed", title="Projection Line Style", options=["solid", "dashed", "dotted"])
+
+// Fibonacci levels for projections
+fib_382 = 0.382
+fib_500 = 0.500
+fib_618 = 0.618
+fib_786 = 0.786
+fib_1272 = 1.272
+fib_1618 = 1.618
+
+// Pattern data structure (simulated - in real implementation would come from external source)
+type PatternData
+    string pattern_type
+    string direction
+    float x_price
+    int x_bar
+    float a_price
+    int a_bar
+    float b_price
+    int b_bar
+    float c_price
+    int c_bar
+    float d_price
+    int d_bar
+    bool is_completed
+    float target1
+    float target2
+    float stop_loss
+
+// Convert string to label size
+get_label_size() =>
+    switch label_size
+        "tiny" => size.tiny
+        "small" => size.small
+        "normal" => size.normal
+        "large" => size.large
+        => size.small
+
+// Convert string to line style
+get_line_style() =>
+    switch projection_style
+        "solid" => line.style_solid
+        "dashed" => line.style_dashed
+        "dotted" => line.style_dotted
+        => line.style_dashed
+
+// Draw pattern function with enhanced visuals
+draw_harmonic_pattern(pattern PatternData) =>
+    if not show_completed_patterns and pattern.is_completed
+        na
+    else if not show_potential_patterns and not pattern.is_completed
+        na
+    else
+        // Determine colors
+        pattern_color = pattern.direction == "bullish" ? bullish_color : bearish_color
+        if not pattern.is_completed
+            pattern_color := potential_color
+        
+        // Draw main pattern lines
+        xa_line = line.new(pattern.x_bar, pattern.x_price, pattern.a_bar, pattern.a_price, 
+                          color=pattern_color, width=pattern_line_width)
+        ab_line = line.new(pattern.a_bar, pattern.a_price, pattern.b_bar, pattern.b_price, 
+                          color=pattern_color, width=pattern_line_width)
+        bc_line = line.new(pattern.b_bar, pattern.b_price, pattern.c_bar, pattern.c_price, 
+                          color=pattern_color, width=pattern_line_width)
+        
+        if pattern.is_completed
+            cd_line = line.new(pattern.c_bar, pattern.c_price, pattern.d_bar, pattern.d_price, 
+                              color=pattern_color, width=pattern_line_width)
+        
+        // Draw connecting/helper lines
+        xb_line = line.new(pattern.x_bar, pattern.x_price, pattern.b_bar, pattern.b_price, 
+                          color=pattern_color, width=1, style=line.style_dashed)
+        ac_line = line.new(pattern.a_bar, pattern.a_price, pattern.c_bar, pattern.c_price, 
+                          color=pattern_color, width=1, style=line.style_dashed)
+        
+        if pattern.is_completed
+            bd_line = line.new(pattern.b_bar, pattern.b_price, pattern.d_bar, pattern.d_price, 
+                              color=pattern_color, width=1, style=line.style_dashed)
+        
+        // Add pattern label
+        label_text = pattern.pattern_type + " " + str.upper(pattern.direction)
+        if pattern.is_completed
+            label_text := label_text + " ✓"
+        else
+            label_text := label_text + " ..."
+        
+        label_y = pattern.direction == "bullish" ? 
+                 math.min(pattern.x_price, math.min(pattern.a_price, math.min(pattern.b_price, pattern.c_price))) :
+                 math.max(pattern.x_price, math.max(pattern.a_price, math.max(pattern.b_price, pattern.c_price)))
+        
+        pattern_label = label.new(pattern.c_bar, label_y, label_text, 
+                                 color=pattern_color, textcolor=color.white, 
+                                 style=pattern.direction == "bullish" ? label.style_label_down : label.style_label_up, 
+                                 size=get_label_size())
+        
+        // Draw projections if pattern is completed
+        if pattern.is_completed and show_projections
+            current_bar = bar_index
+            
+            // Target lines
+            if not na(pattern.target1)
+                target1_line = line.new(pattern.d_bar, pattern.target1, current_bar + 10, pattern.target1, 
+                                       color=color.green, width=1, style=get_line_style())
+                target1_label = label.new(current_bar + 5, pattern.target1, "T1: " + str.tostring(pattern.target1, "#.####"), 
+                                         color=color.green, textcolor=color.white, style=label.style_label_left, size=size.tiny)
+            
+            if not na(pattern.target2)
+                target2_line = line.new(pattern.d_bar, pattern.target2, current_bar + 10, pattern.target2, 
+                                       color=color.green, width=1, style=get_line_style())
+                target2_label = label.new(current_bar + 5, pattern.target2, "T2: " + str.tostring(pattern.target2, "#.####"), 
+                                         color=color.green, textcolor=color.white, style=label.style_label_left, size=size.tiny)
+            
+            // Stop loss line
+            if not na(pattern.stop_loss)
+                sl_line = line.new(pattern.d_bar, pattern.stop_loss, current_bar + 10, pattern.stop_loss, 
+                                  color=color.red, width=1, style=get_line_style())
+                sl_label = label.new(current_bar + 5, pattern.stop_loss, "SL: " + str.tostring(pattern.stop_loss, "#.####"), 
+                                    color=color.red, textcolor=color.white, style=label.style_label_left, size=size.tiny)
+
+// Calculate Fibonacci retracements and extensions
+calc_fib_retracement(start_price, end_price, fib_level) =>
+    start_price + (end_price - start_price) * fib_level
+
+calc_fib_extension(start_price, end_price, fib_level) =>
+    end_price + (end_price - start_price) * fib_level
+
+// Calculate pattern targets based on Fibonacci projections
+calc_gartley_targets(x_price, a_price, b_price, c_price, d_price, direction) =>
+    xa_range = math.abs(a_price - x_price)
+    target1 = direction == "bullish" ? 
+              d_price + xa_range * fib_382 : 
+              d_price - xa_range * fib_382
+    target2 = direction == "bullish" ? 
+              d_price + xa_range * fib_618 : 
+              d_price - xa_range * fib_618
+    stop_loss = direction == "bullish" ? 
+               d_price - xa_range * 0.1 : 
+               d_price + xa_range * 0.1
+    [target1, target2, stop_loss]
+
+calc_bat_targets(x_price, a_price, b_price, c_price, d_price, direction) =>
+    xa_range = math.abs(a_price - x_price)
+    target1 = direction == "bullish" ? 
+              d_price + xa_range * fib_382 : 
+              d_price - xa_range * fib_382
+    target2 = direction == "bullish" ? 
+              d_price + xa_range * fib_618 : 
+              d_price - xa_range * fib_618
+    stop_loss = direction == "bullish" ? 
+               d_price - xa_range * 0.12 : 
+               d_price + xa_range * 0.12
+    [target1, target2, stop_loss]
+
+calc_butterfly_targets(x_price, a_price, b_price, c_price, d_price, direction) =>
+    cd_range = math.abs(d_price - c_price)
+    target1 = direction == "bullish" ? 
+              d_price + cd_range * fib_618 : 
+              d_price - cd_range * fib_618
+    target2 = direction == "bullish" ? 
+              d_price + cd_range * fib_1272 : 
+              d_price - cd_range * fib_1272
+    stop_loss = direction == "bullish" ? 
+               x_price - cd_range * 0.1 : 
+               x_price + cd_range * 0.1
+    [target1, target2, stop_loss]
+
+// Example pattern data (in real implementation, this would come from the main application)
+// This is just for demonstration - the actual patterns would be detected by the main algorithm
+
+// Simulated pattern for demonstration
+if barstate.islast and show_completed_patterns
+    // Create a sample Gartley pattern for demonstration
+    sample_pattern = PatternData.new(
+        pattern_type = "Gartley",
+        direction = "bullish",
+        x_price = low[50],
+        x_bar = bar_index - 50,
+        a_price = high[40],
+        a_bar = bar_index - 40,
+        b_price = low[30],
+        b_bar = bar_index - 30,
+        c_price = high[20],
+        c_bar = bar_index - 20,
+        d_price = low[10],
+        d_bar = bar_index - 10,
+        is_completed = true,
+        target1 = na,
+        target2 = na,
+        stop_loss = na
+    )
+    
+    // Calculate targets
+    [t1, t2, sl] = calc_gartley_targets(sample_pattern.x_price, sample_pattern.a_price, 
+                                       sample_pattern.b_price, sample_pattern.c_price, 
+                                       sample_pattern.d_price, sample_pattern.direction)
+    
+    sample_pattern.target1 := t1
+    sample_pattern.target2 := t2
+    sample_pattern.stop_loss := sl
+    
+    // Draw the pattern
+    draw_harmonic_pattern(sample_pattern)
+
+// Add information table
+if barstate.islast
+    var table info_table = table.new(position.top_right, 3, 8, bgcolor=color.new(color.black, 80), 
+                                     border_width=1, border_color=color.gray)
+    
+    table.cell(info_table, 0, 0, "Pattern", text_color=color.white, text_size=size.small)
+    table.cell(info_table, 1, 0, "Rules", text_color=color.white, text_size=size.small)
+    table.cell(info_table, 2, 0, "Targets", text_color=color.white, text_size=size.small)
+    
+    table.cell(info_table, 0, 1, "Gartley", text_color=color.yellow, text_size=size.tiny)
+    table.cell(info_table, 1, 1, "AB=61.8% XA\nBC=38.2-88.6% AB\nCD=127-161.8% BC\nAD=78.6% XA", text_color=color.white, text_size=size.tiny)
+    table.cell(info_table, 2, 1, "T1: 38.2% XA\nT2: 61.8% XA", text_color=color.green, text_size=size.tiny)
+    
+    table.cell(info_table, 0, 2, "Bat", text_color=color.orange, text_size=size.tiny)
+    table.cell(info_table, 1, 2, "AB=38.2-50% XA\nBC=38.2-88.6% AB\nCD=161.8-261.8% BC\nAD=88.6% XA", text_color=color.white, text_size=size.tiny)
+    table.cell(info_table, 2, 2, "T1: 38.2% XA\nT2: 61.8% XA", text_color=color.green, text_size=size.tiny)
+    
+    table.cell(info_table, 0, 3, "Butterfly", text_color=color.purple, text_size=size.tiny)
+    table.cell(info_table, 1, 3, "AB=78.6% XA\nBC=38.2-88.6% AB\nCD=161.8-261.8% BC\nAD=127-161.8% XA", text_color=color.white, text_size=size.tiny)
+    table.cell(info_table, 2, 3, "T1: 61.8% CD\nT2: 127.2% CD", text_color=color.green, text_size=size.tiny)
+    
+    table.cell(info_table, 0, 4, "Crab", text_color=color.red, text_size=size.tiny)
+    table.cell(info_table, 1, 4, "AB=38.2-61.8% XA\nBC=38.2-88.6% AB\nCD=224-361.8% BC\nAD=161.8%+ XA", text_color=color.white, text_size=size.tiny)
+    table.cell(info_table, 2, 4, "T1: 38.2% XA\nT2: 61.8% XA", text_color=color.green, text_size=size.tiny)
+    
+    table.cell(info_table, 0, 5, "Cypher", text_color=color.green, text_size=size.tiny)
+    table.cell(info_table, 1, 5, "AB=38.2-61.8% XA\nBC=113-141.4% AB\nCD=78.6% XC", text_color=color.white, text_size=size.tiny)
+    table.cell(info_table, 2, 5, "T1: 38.2% CD\nT2: 78.6% CD", text_color=color.green, text_size=size.tiny)
+    
+    table.cell(info_table, 0, 6, "Shark", text_color=color.yellow, text_size=size.tiny)
+    table.cell(info_table, 1, 6, "AB=38.2-61.8% XA\nBC=113-161.8% AB\nCD=161.8-224% BC\nAD=88.6-113% XA", text_color=color.white, text_size=size.tiny)
+    table.cell(info_table, 2, 6, "T1: 50% CD\nT2: 78.6% CD", text_color=color.green, text_size=size.tiny)
+    
+    table.cell(info_table, 0, 7, "ABCD", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_table, 1, 7, "BC=61.8-78.6% AB\nCD=127-161.8% BC", text_color=color.white, text_size=size.tiny)
+    table.cell(info_table, 2, 7, "T1: 61.8% CD\nT2: 127.2% CD", text_color=color.green, text_size=size.tiny)
+
+// Plot something to make the indicator visible
+plot(na, title="Pattern Overlay")

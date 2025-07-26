@@ -1,0 +1,314 @@
+//@version=5
+indicator("Harmonic Pattern Scanner", shorttitle="HPS", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// Input parameters
+tolerance = input.float(5.0, title="Fibonacci Tolerance (%)", minval=0.1, maxval=10.0)
+show_labels = input.bool(true, title="Show Pattern Labels")
+show_ratios = input.bool(false, title="Show Fibonacci Ratios")
+pattern_history = input.int(50, title="Pattern History", minval=10, maxval=100)
+
+// Pattern detection settings
+min_bars_between_points = input.int(5, title="Min Bars Between Points", minval=1, maxval=20)
+max_bars_for_pattern = input.int(100, title="Max Bars for Pattern", minval=20, maxval=500)
+
+// Color settings
+gartley_color = input.color(color.new(color.blue, 20), title="Gartley Color")
+bat_color = input.color(color.new(color.orange, 20), title="Bat Color")
+butterfly_color = input.color(color.new(color.purple, 20), title="Butterfly Color")
+crab_color = input.color(color.new(color.red, 20), title="Crab Color")
+cypher_color = input.color(color.new(color.green, 20), title="Cypher Color")
+shark_color = input.color(color.new(color.yellow, 20), title="Shark Color")
+abcd_color = input.color(color.new(color.gray, 20), title="ABCD Color")
+
+// Fibonacci ratio validation function
+is_ratio_valid(actual, expected, tolerance_pct) =>
+    tolerance_decimal = tolerance_pct / 100
+    lower_bound = expected * (1 - tolerance_decimal)
+    upper_bound = expected * (1 + tolerance_decimal)
+    actual >= lower_bound and actual <= upper_bound
+
+// Swing high/low detection
+swing_length = 5
+is_swing_high = ta.highestbars(high, swing_length) == 0
+is_swing_low = ta.lowestbars(low, swing_length) == 0
+
+// Store swing points
+var line[] lines = array.new<line>()
+var label[] labels = array.new<label>()
+
+// Point detection arrays
+var float[] swing_highs = array.new<float>()
+var int[] swing_high_bars = array.new<int>()
+var float[] swing_lows = array.new<float>()
+var int[] swing_low_bars = array.new<int>()
+
+// Add swing points to arrays
+if is_swing_high
+    array.push(swing_highs, high)
+    array.push(swing_high_bars, bar_index)
+    if array.size(swing_highs) > pattern_history
+        array.shift(swing_highs)
+        array.shift(swing_high_bars)
+
+if is_swing_low
+    array.push(swing_lows, low)
+    array.push(swing_low_bars, bar_index)
+    if array.size(swing_lows) > pattern_history
+        array.shift(swing_lows)
+        array.shift(swing_low_bars)
+
+// Gartley Pattern Detection (X-A-B-C-D)
+detect_gartley_bullish() =>
+    if array.size(swing_lows) >= 3 and array.size(swing_highs) >= 2
+        // Get points (most recent first)
+        d = array.get(swing_lows, array.size(swing_lows) - 1)
+        c = array.get(swing_highs, array.size(swing_highs) - 1)
+        b = array.get(swing_lows, array.size(swing_lows) - 2)
+        a = array.get(swing_highs, array.size(swing_highs) - 2)
+        x = array.get(swing_lows, array.size(swing_lows) - 3)
+        
+        // Calculate ratios
+        xa_ab = math.abs(a - b) / math.abs(x - a)
+        ab_bc = math.abs(b - c) / math.abs(a - b)
+        bc_cd = math.abs(c - d) / math.abs(b - c)
+        xa_ad = math.abs(a - d) / math.abs(x - a)
+        
+        // Validate Gartley ratios
+        valid_xa_ab = is_ratio_valid(xa_ab, 0.618, tolerance)
+        valid_ab_bc = ab_bc >= 0.382 and ab_bc <= 0.886
+        valid_bc_cd = bc_cd >= 1.13 and bc_cd <= 1.618
+        valid_xa_ad = is_ratio_valid(xa_ad, 0.786, tolerance)
+        
+        valid_xa_ab and valid_ab_bc and valid_bc_cd and valid_xa_ad
+
+detect_gartley_bearish() =>
+    if array.size(swing_highs) >= 3 and array.size(swing_lows) >= 2
+        // Get points (most recent first)
+        d = array.get(swing_highs, array.size(swing_highs) - 1)
+        c = array.get(swing_lows, array.size(swing_lows) - 1)
+        b = array.get(swing_highs, array.size(swing_highs) - 2)
+        a = array.get(swing_lows, array.size(swing_lows) - 2)
+        x = array.get(swing_highs, array.size(swing_highs) - 3)
+        
+        // Calculate ratios
+        xa_ab = math.abs(a - b) / math.abs(x - a)
+        ab_bc = math.abs(b - c) / math.abs(a - b)
+        bc_cd = math.abs(c - d) / math.abs(b - c)
+        xa_ad = math.abs(a - d) / math.abs(x - a)
+        
+        // Validate Gartley ratios
+        valid_xa_ab = is_ratio_valid(xa_ab, 0.618, tolerance)
+        valid_ab_bc = ab_bc >= 0.382 and ab_bc <= 0.886
+        valid_bc_cd = bc_cd >= 1.13 and bc_cd <= 1.618
+        valid_xa_ad = is_ratio_valid(xa_ad, 0.786, tolerance)
+        
+        valid_xa_ab and valid_ab_bc and valid_bc_cd and valid_xa_ad
+
+// Bat Pattern Detection
+detect_bat_bullish() =>
+    if array.size(swing_lows) >= 3 and array.size(swing_highs) >= 2
+        d = array.get(swing_lows, array.size(swing_lows) - 1)
+        c = array.get(swing_highs, array.size(swing_highs) - 1)
+        b = array.get(swing_lows, array.size(swing_lows) - 2)
+        a = array.get(swing_highs, array.size(swing_highs) - 2)
+        x = array.get(swing_lows, array.size(swing_lows) - 3)
+        
+        xa_ab = math.abs(a - b) / math.abs(x - a)
+        ab_bc = math.abs(b - c) / math.abs(a - b)
+        bc_cd = math.abs(c - d) / math.abs(b - c)
+        xa_ad = math.abs(a - d) / math.abs(x - a)
+        
+        valid_xa_ab = is_ratio_valid(xa_ab, 0.382, tolerance) or is_ratio_valid(xa_ab, 0.5, tolerance)
+        valid_ab_bc = ab_bc >= 0.382 and ab_bc <= 0.886
+        valid_bc_cd = bc_cd >= 1.618 and bc_cd <= 2.618
+        valid_xa_ad = is_ratio_valid(xa_ad, 0.886, tolerance)
+        
+        valid_xa_ab and valid_ab_bc and valid_bc_cd and valid_xa_ad
+
+// Butterfly Pattern Detection
+detect_butterfly_bullish() =>
+    if array.size(swing_lows) >= 3 and array.size(swing_highs) >= 2
+        d = array.get(swing_lows, array.size(swing_lows) - 1)
+        c = array.get(swing_highs, array.size(swing_highs) - 1)
+        b = array.get(swing_lows, array.size(swing_lows) - 2)
+        a = array.get(swing_highs, array.size(swing_highs) - 2)
+        x = array.get(swing_lows, array.size(swing_lows) - 3)
+        
+        xa_ab = math.abs(a - b) / math.abs(x - a)
+        ab_bc = math.abs(b - c) / math.abs(a - b)
+        bc_cd = math.abs(c - d) / math.abs(b - c)
+        xa_ad = math.abs(a - d) / math.abs(x - a)
+        
+        valid_xa_ab = is_ratio_valid(xa_ab, 0.786, tolerance)
+        valid_ab_bc = ab_bc >= 0.382 and ab_bc <= 0.886
+        valid_bc_cd = bc_cd >= 1.618 and bc_cd <= 2.618
+        valid_xa_ad = xa_ad >= 1.27 and xa_ad <= 1.618  // Extension beyond X
+        
+        valid_xa_ab and valid_ab_bc and valid_bc_cd and valid_xa_ad
+
+// Crab Pattern Detection
+detect_crab_bullish() =>
+    if array.size(swing_lows) >= 3 and array.size(swing_highs) >= 2
+        d = array.get(swing_lows, array.size(swing_lows) - 1)
+        c = array.get(swing_highs, array.size(swing_highs) - 1)
+        b = array.get(swing_lows, array.size(swing_lows) - 2)
+        a = array.get(swing_highs, array.size(swing_highs) - 2)
+        x = array.get(swing_lows, array.size(swing_lows) - 3)
+        
+        xa_ab = math.abs(a - b) / math.abs(x - a)
+        ab_bc = math.abs(b - c) / math.abs(a - b)
+        bc_cd = math.abs(c - d) / math.abs(b - c)
+        xa_ad = math.abs(a - d) / math.abs(x - a)
+        
+        valid_xa_ab = ab_bc >= 0.382 and ab_bc <= 0.618
+        valid_ab_bc = ab_bc >= 0.382 and ab_bc <= 0.886
+        valid_bc_cd = bc_cd >= 2.24 and bc_cd <= 3.618
+        valid_xa_ad = xa_ad >= 1.618  // Deep extension
+        
+        valid_xa_ab and valid_ab_bc and valid_bc_cd and valid_xa_ad
+
+// Cypher Pattern Detection
+detect_cypher_bullish() =>
+    if array.size(swing_lows) >= 3 and array.size(swing_highs) >= 2
+        d = array.get(swing_lows, array.size(swing_lows) - 1)
+        c = array.get(swing_highs, array.size(swing_highs) - 1)
+        b = array.get(swing_lows, array.size(swing_lows) - 2)
+        a = array.get(swing_highs, array.size(swing_highs) - 2)
+        x = array.get(swing_lows, array.size(swing_lows) - 3)
+        
+        xa_ab = math.abs(a - b) / math.abs(x - a)
+        ab_bc = math.abs(b - c) / math.abs(a - b)
+        xc_cd = math.abs(c - d) / math.abs(x - c)
+        
+        valid_xa_ab = xa_ab >= 0.382 and xa_ab <= 0.618
+        valid_ab_bc = is_ratio_valid(ab_bc, 1.13, tolerance) or is_ratio_valid(ab_bc, 1.41, tolerance)
+        valid_xc_cd = is_ratio_valid(xc_cd, 0.786, tolerance)
+        
+        valid_xa_ab and valid_ab_bc and valid_xc_cd
+
+// Shark Pattern Detection
+detect_shark_bullish() =>
+    if array.size(swing_lows) >= 3 and array.size(swing_highs) >= 2
+        d = array.get(swing_lows, array.size(swing_lows) - 1)
+        c = array.get(swing_highs, array.size(swing_highs) - 1)
+        b = array.get(swing_lows, array.size(swing_lows) - 2)
+        a = array.get(swing_highs, array.size(swing_highs) - 2)
+        x = array.get(swing_lows, array.size(swing_lows) - 3)
+        
+        xa_ab = math.abs(a - b) / math.abs(x - a)
+        ab_bc = math.abs(b - c) / math.abs(a - b)
+        bc_cd = math.abs(c - d) / math.abs(b - c)
+        xa_ad = math.abs(a - d) / math.abs(x - a)
+        
+        valid_xa_ab = xa_ab >= 0.382 and xa_ab <= 0.618
+        valid_ab_bc = ab_bc >= 1.13 and ab_bc <= 1.618
+        valid_bc_cd = bc_cd >= 1.618 and bc_cd <= 2.24
+        valid_xa_ad = xa_ad >= 0.886 and xa_ad <= 1.13
+        
+        valid_xa_ab and valid_ab_bc and valid_bc_cd and valid_xa_ad
+
+// ABCD Pattern Detection
+detect_abcd_bullish() =>
+    if array.size(swing_lows) >= 2 and array.size(swing_highs) >= 2
+        d = array.get(swing_lows, array.size(swing_lows) - 1)
+        c = array.get(swing_highs, array.size(swing_highs) - 1)
+        b = array.get(swing_lows, array.size(swing_lows) - 2)
+        a = array.get(swing_highs, array.size(swing_highs) - 2)
+        
+        ab_bc = math.abs(b - c) / math.abs(a - b)
+        bc_cd = math.abs(c - d) / math.abs(b - c)
+        
+        valid_ab_bc = is_ratio_valid(ab_bc, 0.618, tolerance) or is_ratio_valid(ab_bc, 0.786, tolerance)
+        valid_bc_cd = is_ratio_valid(bc_cd, 1.27, tolerance) or is_ratio_valid(bc_cd, 1.618, tolerance)
+        
+        valid_ab_bc and valid_bc_cd
+
+// Draw pattern function
+draw_pattern(pattern_name, pattern_color, x_bar, x_price, a_bar, a_price, b_bar, b_price, c_bar, c_price, d_bar, d_price) =>
+    // Clear old lines and labels
+    if array.size(lines) > 100
+        for i = 0 to 20
+            if array.size(lines) > 0
+                line.delete(array.shift(lines))
+    
+    if array.size(labels) > 50
+        for i = 0 to 10
+            if array.size(labels) > 0
+                label.delete(array.shift(labels))
+    
+    // Draw pattern lines
+    xa_line = line.new(x_bar, x_price, a_bar, a_price, color=pattern_color, width=2)
+    ab_line = line.new(a_bar, a_price, b_bar, b_price, color=pattern_color, width=2)
+    bc_line = line.new(b_bar, b_price, c_bar, c_price, color=pattern_color, width=2)
+    cd_line = line.new(c_bar, c_price, d_bar, d_price, color=pattern_color, width=2)
+    xb_line = line.new(x_bar, x_price, b_bar, b_price, color=pattern_color, width=1, style=line.style_dashed)
+    ac_line = line.new(a_bar, a_price, c_bar, c_price, color=pattern_color, width=1, style=line.style_dashed)
+    
+    array.push(lines, xa_line)
+    array.push(lines, ab_line)
+    array.push(lines, bc_line)
+    array.push(lines, cd_line)
+    array.push(lines, xb_line)
+    array.push(lines, ac_line)
+    
+    // Add pattern label
+    if show_labels
+        pattern_label = label.new(d_bar, d_price, pattern_name, color=pattern_color, textcolor=color.white, style=label.style_label_up, size=size.small)
+        array.push(labels, pattern_label)
+
+// Pattern detection and drawing
+if detect_gartley_bullish()
+    x_bar = array.get(swing_low_bars, array.size(swing_low_bars) - 3)
+    x_price = array.get(swing_lows, array.size(swing_lows) - 3)
+    a_bar = array.get(swing_high_bars, array.size(swing_high_bars) - 2)
+    a_price = array.get(swing_highs, array.size(swing_highs) - 2)
+    b_bar = array.get(swing_low_bars, array.size(swing_low_bars) - 2)
+    b_price = array.get(swing_lows, array.size(swing_lows) - 2)
+    c_bar = array.get(swing_high_bars, array.size(swing_high_bars) - 1)
+    c_price = array.get(swing_highs, array.size(swing_highs) - 1)
+    d_bar = array.get(swing_low_bars, array.size(swing_low_bars) - 1)
+    d_price = array.get(swing_lows, array.size(swing_lows) - 1)
+    
+    draw_pattern("Gartley Bullish", gartley_color, x_bar, x_price, a_bar, a_price, b_bar, b_price, c_bar, c_price, d_bar, d_price)
+
+if detect_gartley_bearish()
+    x_bar = array.get(swing_high_bars, array.size(swing_high_bars) - 3)
+    x_price = array.get(swing_highs, array.size(swing_highs) - 3)
+    a_bar = array.get(swing_low_bars, array.size(swing_low_bars) - 2)
+    a_price = array.get(swing_lows, array.size(swing_lows) - 2)
+    b_bar = array.get(swing_high_bars, array.size(swing_high_bars) - 2)
+    b_price = array.get(swing_highs, array.size(swing_highs) - 2)
+    c_bar = array.get(swing_low_bars, array.size(swing_low_bars) - 1)
+    c_price = array.get(swing_lows, array.size(swing_lows) - 1)
+    d_bar = array.get(swing_high_bars, array.size(swing_high_bars) - 1)
+    d_price = array.get(swing_highs, array.size(swing_highs) - 1)
+    
+    draw_pattern("Gartley Bearish", gartley_color, x_bar, x_price, a_bar, a_price, b_bar, b_price, c_bar, c_price, d_bar, d_price)
+
+// Similar pattern detection for other patterns...
+if detect_bat_bullish()
+    x_bar = array.get(swing_low_bars, array.size(swing_low_bars) - 3)
+    x_price = array.get(swing_lows, array.size(swing_lows) - 3)
+    a_bar = array.get(swing_high_bars, array.size(swing_high_bars) - 2)
+    a_price = array.get(swing_highs, array.size(swing_highs) - 2)
+    b_bar = array.get(swing_low_bars, array.size(swing_low_bars) - 2)
+    b_price = array.get(swing_lows, array.size(swing_lows) - 2)
+    c_bar = array.get(swing_high_bars, array.size(swing_high_bars) - 1)
+    c_price = array.get(swing_highs, array.size(swing_highs) - 1)
+    d_bar = array.get(swing_low_bars, array.size(swing_low_bars) - 1)
+    d_price = array.get(swing_lows, array.size(swing_lows) - 1)
+    
+    draw_pattern("Bat Bullish", bat_color, x_bar, x_price, a_bar, a_price, b_bar, b_price, c_bar, c_price, d_bar, d_price)
+
+// Add alerts
+alertcondition(detect_gartley_bullish(), "Gartley Bullish Pattern", "Bullish Gartley pattern detected!")
+alertcondition(detect_gartley_bearish(), "Gartley Bearish Pattern", "Bearish Gartley pattern detected!")
+alertcondition(detect_bat_bullish(), "Bat Bullish Pattern", "Bullish Bat pattern detected!")
+alertcondition(detect_butterfly_bullish(), "Butterfly Bullish Pattern", "Bullish Butterfly pattern detected!")
+alertcondition(detect_crab_bullish(), "Crab Bullish Pattern", "Bullish Crab pattern detected!")
+alertcondition(detect_cypher_bullish(), "Cypher Bullish Pattern", "Bullish Cypher pattern detected!")
+alertcondition(detect_shark_bullish(), "Shark Bullish Pattern", "Bullish Shark pattern detected!")
+alertcondition(detect_abcd_bullish(), "ABCD Bullish Pattern", "Bullish ABCD pattern detected!")
+
+// Plot something to make the indicator visible
+plot(na, title="Harmonic Patterns")
