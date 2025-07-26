@@ -5,11 +5,26 @@ const Chart = ({ symbol = 'EURUSD', timeframe = '1H', patterns = [] }) => {
   const widgetRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeIndicators, setActiveIndicators] = useState(['RSI', 'MACD']);
+  const [patternVisibility, setPatternVisibility] = useState({
+    'Gartley': true,
+    'Bat': true,
+    'Butterfly': true,
+    'Crab': true,
+    'Cypher': true,
+    'Shark': true,
+    'ABCD': true
+  });
 
   const drawSingleHarmonicPattern = useCallback((widget, pattern, index) => {
     try {
       const chart = widget.activeChart();
       const { points, type } = pattern;
+      
+      // Skip if pattern type is not visible
+      if (!patternVisibility[type]) {
+        return;
+      }
       
       // Get pattern color based on type
       const patternColors = {
@@ -26,6 +41,60 @@ const Chart = ({ symbol = 'EURUSD', timeframe = '1H', patterns = [] }) => {
       
       // Draw pattern lines if all points exist
       if (points.X && points.A && points.B && points.C && points.D) {
+        // Create PRZ (Potential Reversal Zone) - area around point D
+        const przWidth = Math.abs(points.D.price - points.C.price) * 0.1; // 10% of CD move
+        const przTop = points.D.price + przWidth;
+        const przBottom = points.D.price - przWidth;
+        
+        // Draw PRZ Rectangle
+        chart.createShape(
+          { time: points.C.time, price: przTop },
+          {
+            shape: 'rectangle',
+            overrides: {
+              backgroundColor: color,
+              transparency: 85,
+              borderColor: color,
+              borderWidth: 1
+            }
+          },
+          { time: points.D.time + (points.D.time - points.C.time), price: przBottom }
+        );
+        
+        // Calculate Fibonacci targets
+        const CDMove = Math.abs(points.D.price - points.C.price);
+        const target1 = points.D.price + (CDMove * 0.382) * (pattern.direction === 'bullish' ? 1 : -1);
+        const target2 = points.D.price + (CDMove * 0.618) * (pattern.direction === 'bullish' ? 1 : -1);
+        const stopLoss = points.D.price - (CDMove * 0.236) * (pattern.direction === 'bullish' ? 1 : -1);
+        
+        // Draw trading levels
+        const tradingLevelOptions = {
+          shape: 'horizontal_line',
+          overrides: {
+            linecolor: color,
+            linewidth: 1,
+            linestyle: 2,
+            transparency: 20
+          }
+        };
+        
+        // Target levels
+        chart.createShape(
+          { time: points.D.time, price: target1 },
+          { ...tradingLevelOptions, overrides: { ...tradingLevelOptions.overrides, linecolor: '#00d084' } }
+        );
+        
+        chart.createShape(
+          { time: points.D.time, price: target2 },
+          { ...tradingLevelOptions, overrides: { ...tradingLevelOptions.overrides, linecolor: '#00d084' } }
+        );
+        
+        // Stop loss level
+        chart.createShape(
+          { time: points.D.time, price: stopLoss },
+          { ...tradingLevelOptions, overrides: { ...tradingLevelOptions.overrides, linecolor: '#ff4747' } }
+        );
+        
         // Main pattern lines
         const lineOptions = {
           shape: 'trend_line',
@@ -138,7 +207,7 @@ const Chart = ({ symbol = 'EURUSD', timeframe = '1H', patterns = [] }) => {
     } catch (err) {
       console.error('Error drawing single harmonic pattern:', err);
     }
-  }, []);
+  }, [patternVisibility]);
 
   const drawHarmonicPatterns = useCallback((widget, patternList) => {
     try {
@@ -151,6 +220,83 @@ const Chart = ({ symbol = 'EURUSD', timeframe = '1H', patterns = [] }) => {
       console.error('Error drawing harmonic patterns:', err);
     }
   }, [drawSingleHarmonicPattern]);
+
+  const loadTechnicalIndicators = useCallback((widget) => {
+    try {
+      const chart = widget.activeChart();
+      
+      // Remove existing indicators first
+      chart.getAllStudies().forEach(study => {
+        chart.removeEntity(study.id);
+      });
+      
+      // Add selected indicators
+      activeIndicators.forEach(indicator => {
+        switch (indicator) {
+          case 'RSI':
+            chart.createStudy('Relative Strength Index', false, false, {
+              length: 14
+            }, {
+              'plot.color': '#ff9800'
+            });
+            break;
+            
+          case 'MACD':
+            chart.createStudy('MACD', false, false, {
+              fastLength: 12,
+              slowLength: 26,
+              signalLength: 9
+            }, {
+              'histogram.color': '#2196f3',
+              'signal.color': '#ff4747',
+              'macd.color': '#00d084'
+            });
+            break;
+            
+          case 'Stochastic':
+            chart.createStudy('Stochastic', false, false, {
+              kLength: 14,
+              dLength: 3
+            }, {
+              '%k.color': '#9c27b0',
+              '%d.color': '#607d8b'
+            });
+            break;
+            
+          case 'Bollinger Bands':
+            chart.createStudy('Bollinger Bands', false, true, {
+              length: 20,
+              mult: 2
+            }, {
+              'upper.color': '#ff9800',
+              'lower.color': '#ff9800',
+              'median.color': '#ffc107'
+            });
+            break;
+            
+          case 'EMA':
+            chart.createStudy('Moving Average Exponential', false, true, {
+              length: 20
+            }, {
+              'plot.color': '#00d084'
+            });
+            break;
+            
+          case 'Volume':
+            chart.createStudy('Volume', false, false, {}, {
+              'volume.color.0': '#ff4747',
+              'volume.color.1': '#00d084'
+            });
+            break;
+            
+          default:
+            console.warn(`Unknown indicator: ${indicator}`);
+        }
+      });
+    } catch (err) {
+      console.error('Error loading technical indicators:', err);
+    }
+  }, [activeIndicators]);
 
   useEffect(() => {
     // Load TradingView script and clean datafeed
@@ -279,6 +425,9 @@ const Chart = ({ symbol = 'EURUSD', timeframe = '1H', patterns = [] }) => {
           setIsLoading(false);
           console.log('TradingView chart is ready');
           
+          // Load technical indicators
+          loadTechnicalIndicators(widget);
+          
           // Draw harmonic patterns on the chart
           if (patterns && patterns.length > 0) {
             drawHarmonicPatterns(widget, patterns);
@@ -309,7 +458,7 @@ const Chart = ({ symbol = 'EURUSD', timeframe = '1H', patterns = [] }) => {
         widgetRef.current = null;
       }
     };
-  }, [symbol, timeframe, patterns, drawHarmonicPatterns]);
+  }, [symbol, timeframe, patterns, drawHarmonicPatterns, loadTechnicalIndicators]);
 
   // Update patterns when they change
   useEffect(() => {
@@ -317,6 +466,26 @@ const Chart = ({ symbol = 'EURUSD', timeframe = '1H', patterns = [] }) => {
       drawHarmonicPatterns(widgetRef.current, patterns);
     }
   }, [patterns, drawHarmonicPatterns]);
+
+  // Update indicators when activeIndicators change
+  useEffect(() => {
+    if (widgetRef.current && !isLoading) {
+      loadTechnicalIndicators(widgetRef.current);
+    }
+  }, [activeIndicators, loadTechnicalIndicators, isLoading]);
+
+  // Update pattern visibility when it changes
+  useEffect(() => {
+    if (widgetRef.current && patterns && !isLoading) {
+      // Clear all shapes first
+      const chart = widgetRef.current.activeChart();
+      chart.getAllShapes().forEach(shape => {
+        chart.removeEntity(shape.id);
+      });
+      // Redraw patterns with new visibility settings
+      drawHarmonicPatterns(widgetRef.current, patterns);
+    }
+  }, [patternVisibility, patterns, drawHarmonicPatterns, isLoading]);
 
   const getPatternColor = (type) => {
     const colors = {
@@ -366,9 +535,65 @@ const Chart = ({ symbol = 'EURUSD', timeframe = '1H', patterns = [] }) => {
         style={{ minHeight: '400px' }}
       />
       
+      {/* Indicator Controls */}
+      {!isLoading && (
+        <div className="absolute top-4 left-4 bg-bg-tertiary border border-border-color rounded p-3 z-20 max-w-xs">
+          <div className="text-sm font-semibold mb-2 text-text-primary">Technical Indicators</div>
+          <div className="grid grid-cols-2 gap-2">
+            {['RSI', 'MACD', 'Stochastic', 'Bollinger Bands', 'EMA', 'Volume'].map(indicator => (
+              <label key={indicator} className="flex items-center text-xs">
+                <input
+                  type="checkbox"
+                  checked={activeIndicators.includes(indicator)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setActiveIndicators(prev => [...prev, indicator]);
+                    } else {
+                      setActiveIndicators(prev => prev.filter(i => i !== indicator));
+                    }
+                  }}
+                  className="mr-1 w-3 h-3"
+                />
+                <span className="text-text-secondary">{indicator}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Pattern Controls */}
+      {!isLoading && (
+        <div className="absolute top-4 left-80 bg-bg-tertiary border border-border-color rounded p-3 z-20 max-w-xs">
+          <div className="text-sm font-semibold mb-2 text-text-primary">Harmonic Patterns</div>
+          <div className="grid grid-cols-2 gap-1">
+            {Object.entries(patternVisibility).map(([pattern, visible]) => (
+              <label key={pattern} className="flex items-center text-xs">
+                <input
+                  type="checkbox"
+                  checked={visible}
+                  onChange={(e) => {
+                    setPatternVisibility(prev => ({
+                      ...prev,
+                      [pattern]: e.target.checked
+                    }));
+                  }}
+                  className="mr-1 w-3 h-3"
+                />
+                <span 
+                  className="text-text-secondary"
+                  style={{ color: getPatternColor(pattern) }}
+                >
+                  {pattern}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      
       {/* Pattern Info Overlay */}
       {patterns && patterns.length > 0 && !isLoading && (
-        <div className="absolute top-4 left-4 bg-bg-tertiary border border-border-color rounded p-3 z-20">
+        <div className="absolute bottom-4 left-4 bg-bg-tertiary border border-border-color rounded p-3 z-20">
           <div className="text-sm font-semibold mb-2 text-text-primary">Active Patterns</div>
           {patterns.slice(0, 3).map((pattern, index) => (
             <div key={index} className="text-xs text-text-secondary mb-1 flex items-center">
@@ -377,6 +602,13 @@ const Chart = ({ symbol = 'EURUSD', timeframe = '1H', patterns = [] }) => {
                 style={{ backgroundColor: getPatternColor(pattern.type) }}
               />
               {pattern.type} - {pattern.status}
+              {pattern.direction && (
+                <span className={`ml-2 px-1 rounded text-xs ${
+                  pattern.direction === 'bullish' ? 'bg-green-600' : 'bg-red-600'
+                }`}>
+                  {pattern.direction}
+                </span>
+              )}
             </div>
           ))}
           {patterns.length > 3 && (
